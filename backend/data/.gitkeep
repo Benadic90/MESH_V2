@@ -1,0 +1,5 @@
+# ---> This file is gitingored at runtime.
+# It is re-created from .env.example — copy and edit it locally:
+#   cp .env.example .env        (backend)
+#   cp ../.env.example .env.local  (frontend)
+# Real .env / .env.local are never committed.

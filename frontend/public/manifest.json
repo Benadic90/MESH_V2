@@ -1,0 +1,13 @@
+{
+  "name": "RESCUE-MESH",
+  "short_name": "RESCUE-MESH",
+  "description": "Offline disaster mesh — SOS via ESP32 Wi-Fi bubble + LoRa, no internet needed.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f1318",
+  "theme_color": "#4493f8",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

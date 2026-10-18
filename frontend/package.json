@@ -1,0 +1,31 @@
+{
+  "name": "rescue-mesh-frontend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "RESCUE-MESH V2 — Next.js Pages + PWA + Leaflet (Track 3)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "axios": "1.7.2",
+    "leaflet": "1.9.4",
+    "leaflet-routing-machine": "3.2.12",
+    "next": "13.5.6",
+    "next-pwa": "5.6.0",
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "react-leaflet": "4.2.1",
+    "socket.io-client": "4.8.3",
+    "y-indexeddb": "9.0.12",
+    "y-websocket": "3.0.0",
+    "yjs": "13.6.12",
+    "zustand": "4.5.0"
+  },
+  "devDependencies": {
+    "@types/react": "18.2.55",
+    "@types/react-dom": "18.2.19",
+    "typescript": "5.4.5"
+  }
+}

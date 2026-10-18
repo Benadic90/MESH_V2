@@ -1,0 +1,49 @@
+# Node
+node_modules/
+dist/
+.next/
+out/
+build/
+
+# Env — never commit secrets
+.env
+.env.local
+.env.*.local
+
+# Backend snapshot (runtime persistence)
+backend/data/snapshot.json
+backend/data/*.json
+!backend/data/.gitkeep
+
+# Frontend
+frontend/.next/
+frontend/out/
+
+# Arduino / ESP32
+firmware/**/*.pio/
+firmware/**/.pio/
+*.hex
+*.bin
+*.elf
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*~
+
+# Word temp files
+~$*.docx
+~$*.doc
+
+# Simulation build
+simulation/.next/
+simulation/out/

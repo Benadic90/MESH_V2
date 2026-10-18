@@ -1,0 +1,33 @@
+{
+  "name": "rescue-mesh-backend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "RESCUE-MESH V2 — Express + Socket.IO + Yjs stack (Track 2)",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "cors": "2.8.5",
+    "dotenv": "16.4.5",
+    "express": "4.19.2",
+    "socket.io": "4.8.3",
+    "uuid": "9.0.1",
+    "ws": "8.18.0",
+    "y-websocket": "1.4.3",
+    "yjs": "13.6.12",
+    "zod": "4.4.3"
+  },
+  "devDependencies": {
+    "@types/cors": "2.8.19",
+    "@types/express": "4.17.21",
+    "@types/node": "20.12.5",
+    "@types/ws": "8.18.1",
+    "ts-node-dev": "2.0.0",
+    "typescript": "5.4.5",
+    "vitest": "1.6.0"
+  }
+}

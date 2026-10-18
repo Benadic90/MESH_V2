@@ -335,9 +335,6 @@ A judge must be able to do this **without our help** — we rehearse until all 9
 ---
 
 <div align="center">
-
-**Built for Nationals 2026 — Same idea. Professional execution.**
-
 *If you can see our Wi-Fi bubble, you can summon help.*
 
 </div>

@@ -1,21 +1,32 @@
 /**
- * TRACK 3 — SosForm (victim) · index.tsx
- * TODO: implement per FR-01 (big tap targets, GPS, Zod-shaped payload, toast)
- * Stubs render immediately so `npm run dev` + build never break on scaffold.
- * Replace this stub with the full form when Track 3 starts Day 2.
+ * TRACK 3 — BENADIC90 — Day 1 shell
+ * Victim SOS page — premium placeholder. Full SosForm (FR-01) lands Day 2-3.
+ * Day 1 exit: page loads with tokens + navbar looking NDRF-grade on projector.
  */
 export default function SosPage() {
   return (
-    <div style={{ maxWidth: 600, margin: "0 auto" }}>
-      <h2 style={{ marginBottom: 8, fontSize: 18, fontWeight: 700 }}>Submit SOS Request</h2>
-      <div className="card">
-        <p style={{ color: "var(--text-secondary)", fontSize: 13 }}>
-          Victim SOS form — scaffold. Track 3 will implement the full form (GPS, resource chips, offline queue, toast) here.
-        </p>
-        <p style={{ marginTop: 10, fontSize: 12, color: "var(--text-muted)" }}>
-          Contract: POST <code>/send_sos</code> with <code>SosRequestInput</code> shape from <code>backend/src/types.ts</code>.
-        </p>
+    <div style={{ maxWidth: 640, margin: "0 auto" }}>
+      <div className="page-shell-header">
+        <h1 className="page-shell-title">Submit SOS Request</h1>
+        <p className="page-shell-subtitle">Ground-Zero — works offline via ESP32 Wi-Fi bubble, no internet required.</p>
       </div>
+
+      <div className="card">
+        <div className="empty-state">
+          <div className="empty-state-icon" aria-hidden>
+            🚨
+          </div>
+          <div className="empty-state-title">SOS form lands next</div>
+          <p className="empty-state-desc">
+            Day 2–3 — big tap targets, auto-detect GPS with offline fallback, resource chips, and offline queue.
+            Contract: <code>POST /send_sos</code> with <code>SosRequestInput</code> from <code>backend/src/types.ts</code>.
+          </p>
+        </div>
+      </div>
+
+      <p style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
+        Track 3 · BENADIC90 · frontend/src/pages/index.tsx
+      </p>
     </div>
   );
 }

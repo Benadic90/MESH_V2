@@ -14,9 +14,11 @@ KEYWORD_WEIGHTS = [
     {"pattern": re.compile(r"\b(no food|hungry|water|stranded|thirsty|starving)\b", re.IGNORECASE), "weight": 10, "reason": "food/water/stranded"},
 ]
 
+# Keep the calculated score in the same 0–100 range as the TypeScript engine.
 def clamp_priority(score: int) -> int:
     return max(0, min(100, round(score)))
 
+# Apply the TypeScript scoring rules to a dictionary-shaped SOS request.
 def calculate_priority(request: dict) -> int:
     if "priorityScore" in request and request["priorityScore"] is not None:
         return clamp_priority(request["priorityScore"])
@@ -33,6 +35,7 @@ def calculate_priority(request: dict) -> int:
         score += 10
     return clamp_priority(score)
 
+# Use the same score bands as priority.ts.
 def derive_severity_label(priority_score: int) -> str:
     if priority_score >= 85:
         return "critical"
@@ -43,6 +46,7 @@ def derive_severity_label(priority_score: int) -> str:
     return "low"
 
 if __name__ == "__main__":
+    # These examples make it easy to check the Python mirror from the command line.
     cases = [
         {"message": "Building collapsed, 5 people trapped inside", "peopleCount": 5, "neededResources": ["ambulance", "fire_team"]},
         {"message": "No food for two days, we are hungry", "peopleCount": 3, "neededResources": ["food_supply"]},

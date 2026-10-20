@@ -5,6 +5,7 @@
 
 export type RequestStatus = "pending" | "assigned";
 
+// Resource categories accepted in requests and assigned by the store.
 export type ResourceType =
   | "ambulance"
   | "medical_team"
@@ -18,6 +19,7 @@ export interface LocationPayload {
   lng?: number;        // -180..180
 }
 
+// Fields accepted when a caller creates an SOS.
 export interface SosRequestInput {
   reporterName?: string;                  // 2–80 optional
   contactNumber?: string;                 // 7–20 optional
@@ -31,6 +33,7 @@ export interface SosRequestInput {
   hopCount?: number;                      // 0 on creation, ++ per LoRa hop, max 5
 }
 
+// A stored SOS adds server-owned identity, status, timestamps, and assignments.
 export interface SosRequest extends SosRequestInput {
   id: string;
   status: RequestStatus;
@@ -42,6 +45,7 @@ export interface SosRequest extends SosRequestInput {
   assignedResourceIds?: string[];
 }
 
+// A dispatchable team or supply unit.
 export interface Resource {
   id: string;
   name: string;
@@ -50,6 +54,7 @@ export interface Resource {
   available: boolean;
 }
 
+// Result returned after a successful resource assignment.
 export interface AssignmentResult {
   request: SosRequest;
   resources: Resource[];

@@ -12,6 +12,7 @@ const resourceTypes = [
   "food_supply",
 ] as const;
 
+// Public SOS input constraints; trim user-entered text before validating lengths.
 export const sendSosSchema = z.object({
   reporterName: z.string().trim().min(2).max(80).optional(),
   contactNumber: z.string().trim().min(7).max(20).optional(),
@@ -28,15 +29,18 @@ export const sendSosSchema = z.object({
   hopCount: z.number().int().min(0).max(5).optional(),
 });
 
+// Requires the SOS ID and optionally accepts explicit resource IDs to reserve.
 export const assignResourceSchema = z.object({
   requestId: z.string().trim().min(1),
   resourceIds: z.array(z.string().trim().min(1)).optional(),
 });
 
+// Optional device address for the ESP32 bridge, with its default access-point IP.
 export const syncEsp32Schema = z.object({
   ip: z.string().trim().min(7).max(45).default("192.168.4.1"),
 });
 
+// Optional LoRa gateway settings; the port is available for gateway configuration.
 export const syncLoraSchema = z
   .object({
     gatewayIp: z.string().trim().min(7).max(45).default("192.168.4.1"),

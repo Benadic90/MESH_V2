@@ -9,6 +9,7 @@ import { createSosRequest, listRequests } from "../store";
 export function createSyncEsp32Router(): Router {
   const r = Router();
 
+  // Fetch SOS data from the device and import only records not already in the store.
   r.post("/sync_esp32", async (req: Request, res: Response) => {
     const ip = typeof req.body?.ip === "string" ? req.body.ip : "192.168.4.1";
     try {

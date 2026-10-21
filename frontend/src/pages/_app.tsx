@@ -1,11 +1,11 @@
 import "../styles/globals.css";
-import Link from "next/link";
-import { useRouter } from "next/router";
-import { useState, useEffect } from "react";
 import Head from "next/head";
-import { useAppStore } from "../store/meshStore";
+import { useRouter } from "next/router";
+import BottomNav from "../components/BottomNav";
 
-// ── Track 3 — BENADIC90 — App shell + NDRF Navbar + OFFLINE banner + mobile ──
+// Only wizard steps in /emergency hide the bottom navigation bar
+const NO_NAV_PAGES = ["/emergency"];
+
 export default function App({
   Component,
   pageProps,
@@ -14,84 +14,46 @@ export default function App({
   pageProps: Record<string, unknown>;
 }) {
   const router = useRouter();
-  const { isOffline, toggleOfflineMode } = useAppStore();
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const getLinkClass = (path: string) => (router.pathname === path ? "active" : "");
-
-  useEffect(() => {
-    const close = () => setIsMenuOpen(false);
-    router.events?.on("routeChangeStart", close);
-    return () => router.events?.off("routeChangeStart", close);
-  }, [router.events]);
+  const showNav = !NO_NAV_PAGES.some((p) => router.pathname.startsWith(p));
 
   return (
     <>
       <Head>
-        <title>RESCUE-MESH V2 | Disaster Response Mesh</title>
-        <meta name="theme-color" content="#4493f8" />
-        <meta name="description" content="RESCUE-MESH V2 — Offline disaster mesh: ESP32 Wi-Fi bubble + LoRa + AI triage. Works without internet." />
+        <title>RESCUE-MESH | Help · Connect · Save Lives</title>
+        <meta name="theme-color" content="#ffffff" />
+        <meta
+          name="description"
+          content="RESCUE-MESH — Offline disaster mesh: ESP32 Wi-Fi bubble + LoRa + AI triage. Works without internet."
+        />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="manifest" href="/manifest.json" />
       </Head>
 
-      <nav className="navbar">
-        <div className="navbar-top">
-          <Link href="/" className="navbar-brand" onClick={() => setIsMenuOpen(false)}>
-            <span className="navbar-brand-dot" aria-hidden />
-            RESCUE-MESH
-            <span className="navbar-brand-v2">V2</span>
-          </Link>
-          <button
-            className="mobile-menu-btn"
-            onClick={() => setIsMenuOpen((v) => !v)}
-            aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-            aria-expanded={isMenuOpen}
-          >
-            {isMenuOpen ? "✕" : "☰"}
-          </button>
+      <div className="app-container">
+        {/* Top iOS-style status bar time/icons */}
+        <div className="top-status-bar">
+          <span>9:41</span>
+          <div className="status-bar-icons">
+            <svg width="15" height="11" viewBox="0 0 16 12" fill="currentColor">
+              <path d="M0 10h2V2H0v8zm4 0h2V4H4v6zm4 0h2V6H8v4zm4 0h2V0h-2v10z" />
+            </svg>
+            <svg width="15" height="11" viewBox="0 0 16 12" fill="currentColor">
+              <path d="M8 2.5C5.2 2.5 2.7 3.7.9 5.6L0 4.7C2.1 2.5 5 1 8 1s5.9 1.5 8 3.7l-.9.9C13.3 3.7 10.8 2.5 8 2.5zm0 3C6.1 5.5 4.4 6.3 3.1 7.6l-.9-.9c1.5-1.5 3.5-2.4 5.8-2.4s4.3.9 5.8 2.4l-.9.9C11.6 6.3 9.9 5.5 8 5.5zm0 3c-1.1 0-2.1.5-2.8 1.2L8 12l2.8-2.3c-.7-.7-1.7-1.2-2.8-1.2z" />
+            </svg>
+            <svg width="22" height="11" viewBox="0 0 24 12" fill="currentColor">
+              <rect x="1" y="1" width="19" height="10" rx="3" fill="none" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="3" y="3" width="13" height="6" rx="1.5" />
+              <path d="M22 4.5v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </div>
         </div>
 
-        <div className={`nav-links ${isMenuOpen ? "open" : ""}`}>
-          <Link href="/" className={getLinkClass("/")} onClick={() => setIsMenuOpen(false)}>
-            Submit SOS
-          </Link>
-          <Link href="/status" className={getLinkClass("/status")} onClick={() => setIsMenuOpen(false)}>
-            Check Status
-          </Link>
-          <Link href="/dashboard" className={getLinkClass("/dashboard")} onClick={() => setIsMenuOpen(false)}>
-            Dashboard
-          </Link>
-          <Link href="/map" className={getLinkClass("/map")} onClick={() => setIsMenuOpen(false)}>
-            Map
-          </Link>
-        </div>
+        <main className={`app-main ${showNav ? "" : "no-nav"}`}>
+          <Component {...pageProps} />
+        </main>
 
-        <div className={`navbar-controls ${isMenuOpen ? "open" : ""}`}>
-          {isOffline && (
-            <span className="offline-badge">
-              <span className="offline-badge-dot" aria-hidden />
-              Offline
-            </span>
-          )}
-          <button
-            onClick={toggleOfflineMode}
-            style={{
-              padding: "6px 14px",
-              background: isOffline ? "var(--critical)" : "var(--low)",
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: 0.5,
-              textTransform: "uppercase",
-            }}
-            title={isOffline ? "Reconnect mesh network — CRDT will sync" : "Go offline — cache to IndexedDB + Yjs"}
-          >
-            {isOffline ? "Sync Online" : "Go Offline"}
-          </button>
-        </div>
-      </nav>
-
-      <main className="container">
-        <Component {...pageProps} />
-      </main>
+        {showNav && <BottomNav messageBadge={3} />}
+      </div>
     </>
   );
 }

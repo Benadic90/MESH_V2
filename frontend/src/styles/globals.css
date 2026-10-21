@@ -952,6 +952,95 @@ a {
   word-break: break-word;
 }
 
+/* Interactive Message Input Box on Confirm & Send */
+.confirm-message-input {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-title);
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 10px;
+  resize: vertical;
+  min-height: 64px;
+  line-height: 1.45;
+  outline: none;
+  transition: all 0.15s ease;
+  margin-top: 4px;
+}
+
+.confirm-message-input:focus {
+  background: #ffffff;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.confirm-message-input::placeholder {
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.quick-message-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.quick-tag-hint {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-right: 2px;
+}
+
+.quick-message-tag-btn {
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  font-size: 11px;
+  font-weight: 600;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.quick-message-tag-btn:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  transform: translateY(-1px);
+}
+
+.quick-message-tag-btn:active {
+  transform: scale(0.96);
+}
+
+.form-message-box {
+  width: 100%;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13.5px;
+  color: var(--text-title);
+  background: #ffffff;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  resize: vertical;
+  min-height: 56px;
+  outline: none;
+  transition: all 0.15s ease;
+}
+
+.form-message-box:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
 /* ═══════════════════════════════════════
    EMERGENCY WIZARD: STEP 4 (Sending...)
    ═══════════════════════════════════════ */

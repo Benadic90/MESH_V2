@@ -89,6 +89,15 @@ const RESOURCE_CONFIG = [
   },
 ];
 
+const QUICK_MESSAGE_SUGGESTIONS = [
+  "People trapped",
+  "Medical emergency / Bleeding",
+  "Water level rising",
+  "Elderly & children here",
+  "Building collapsed",
+  "Need immediate rescue",
+];
+
 function BackButton({ onClick }: { onClick: () => void }) {
   return (
     <button className="back-btn" onClick={onClick} aria-label="Go back">
@@ -336,6 +345,25 @@ export default function EmergencyPage() {
           </div>
         </div>
 
+        {/* Optional Situation Note */}
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 700, color: "var(--text-title)" }}>
+              Situation Details (Optional)
+            </label>
+            <span style={{ fontSize: 11, color: "var(--text-secondary)" }}>
+              {message.length}/1000
+            </span>
+          </div>
+          <textarea
+            className="form-message-box"
+            rows={2}
+            placeholder="Type your emergency message... e.g. People trapped near the old bridge. Need immediate help."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+          />
+        </div>
+
         <button className="btn-red-primary" onClick={() => setStep(2)}>
           <span>Next: Location</span>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -564,13 +592,44 @@ export default function EmergencyPage() {
             </div>
           </div>
 
-          {/* Row 5: Message */}
+          {/* Row 5: Message (Directly Editable for Victim) */}
           <div className="confirm-row">
-            <div className="confirm-icon-box">💬</div>
+            <div className="confirm-icon-box" style={{ background: "#eff6ff", color: "#3b82f6" }}>
+              💬
+            </div>
             <div className="confirm-row-body">
-              <div className="confirm-row-label">Message (optional)</div>
-              <div className="confirm-row-value" style={{ fontStyle: "italic", fontWeight: 500 }}>
-                &ldquo;{message}&rdquo;
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
+                <div className="confirm-row-label">MESSAGE (OPTIONAL)</div>
+                <span style={{ fontSize: 10, color: "var(--text-secondary)", fontWeight: 600 }}>
+                  {message.length}/1000
+                </span>
+              </div>
+              <textarea
+                className="confirm-message-input"
+                rows={3}
+                placeholder="Type your message here... e.g. People trapped near the old bridge. Need immediate help."
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+              />
+              <div className="quick-message-tags">
+                <span className="quick-tag-hint">Quick add:</span>
+                {QUICK_MESSAGE_SUGGESTIONS.map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    className="quick-message-tag-btn"
+                    onClick={() => {
+                      setMessage((prev) => {
+                        const trimmed = prev.trim();
+                        if (!trimmed) return tag;
+                        if (trimmed.includes(tag)) return prev;
+                        return `${trimmed}. ${tag}`;
+                      });
+                    }}
+                  >
+                    + {tag}
+                  </button>
+                ))}
               </div>
             </div>
           </div>

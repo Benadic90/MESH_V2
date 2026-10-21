@@ -6,6 +6,7 @@ export default class AppDocument extends Document {
       <Html lang="en">
         <Head>
           <link rel="manifest" href="/manifest.json" />
+          <meta name="theme-color" content="#4493f8" />
         </Head>
         <body>
           <Main />

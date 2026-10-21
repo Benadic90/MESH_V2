@@ -1,18 +1,200 @@
 /**
  * TRACK 3 — BENADIC90
- * Screen 7: Active Emergency — Live Radar Map + Status Timeline + Emergency Meta
+ * Screen 7: Active Emergency — Live Radar Map + Status Timeline + Dynamic Emergency Meta
  */
 import { useRouter } from "next/router";
+import { useEffect, useState } from "react";
+import { useAppStore } from "../store/meshStore";
+import { api } from "../lib/api";
+
+interface SosRecord {
+  id: string;
+  status?: "pending" | "assigned" | "resolved" | string;
+  severityLabel?: "low" | "medium" | "high" | "critical" | string;
+  peopleCount?: number;
+  message?: string;
+  neededResources?: string[];
+  assignedResources?: string[];
+  location?: {
+    area?: string;
+    lat?: number;
+    lng?: number;
+  };
+  createdAt?: string;
+}
+
+const RESOURCE_LABELS: Record<string, string> = {
+  ambulance: "Ambulance",
+  medical_team: "Medical Team",
+  fire_team: "Fire Team",
+  food_supply: "Food & Water",
+  shelter_unit: "Shelter",
+};
 
 export default function ActiveEmergencyPage() {
   const router = useRouter();
-  const sosId = (router.query.id as string) || "#RM-2026-0427-001";
+  const { id } = router.query;
+  const { getLocalRequest } = useAppStore();
+
+  const [loading, setLoading] = useState(true);
+  const [sosRecord, setSosRecord] = useState<SosRecord | null>(null);
+
+  useEffect(() => {
+    if (!router.isReady) return;
+
+    const sosId = typeof id === "string" ? id : "";
+    if (!sosId) {
+      setLoading(false);
+      return;
+    }
+
+    // 1. Check local Zustand / Yjs / IndexedDB store first
+    const local = getLocalRequest(sosId);
+    if (local) {
+      setSosRecord(local as unknown as SosRecord);
+      setLoading(false);
+      return;
+    }
+
+    // 2. Query backend REST API
+    let isMounted = true;
+    api
+      .get("/get_requests")
+      .then((res) => {
+        if (!isMounted) return;
+        const list: SosRecord[] = res.data?.data || [];
+        const match = list.find((r) => r.id === sosId);
+        if (match) {
+          setSosRecord(match);
+        } else if (sosId === "#RM-2026-0427-001") {
+          // Demo fallback
+          setSosRecord({
+            id: "#RM-2026-0427-001",
+            status: "pending",
+            severityLabel: "high",
+            peopleCount: 2,
+            neededResources: ["ambulance", "fire_team", "food_supply", "shelter_unit"],
+            location: {
+              area: "27.7089° N, 85.3227° E",
+              lat: 27.7089,
+              lng: 85.3227,
+            },
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          setSosRecord(null);
+        }
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        if (sosId === "#RM-2026-0427-001") {
+          setSosRecord({
+            id: "#RM-2026-0427-001",
+            status: "pending",
+            severityLabel: "high",
+            peopleCount: 2,
+            neededResources: ["ambulance", "fire_team", "food_supply", "shelter_unit"],
+            location: {
+              area: "27.7089° N, 85.3227° E",
+              lat: 27.7089,
+              lng: 85.3227,
+            },
+            createdAt: new Date().toISOString(),
+          });
+        } else {
+          setSosRecord(null);
+        }
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [router.isReady, id, getLocalRequest]);
+
+  if (loading) {
+    return (
+      <>
+        <div className="subpage-header">
+          <button className="back-btn" onClick={() => router.push("/")} aria-label="Go back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="subpage-title">Active Emergency</h1>
+        </div>
+        <div style={{ padding: "40px 16px", textAlign: "center" }}>
+          <div className="skeleton" style={{ width: "100%", height: 80, borderRadius: 16, marginBottom: 16 }} />
+          <div className="skeleton" style={{ width: "100%", height: 240, borderRadius: 16, marginBottom: 16 }} />
+          <div className="skeleton" style={{ width: "70%", height: 32, borderRadius: 8, margin: "0 auto" }} />
+        </div>
+      </>
+    );
+  }
+
+  if (!sosRecord) {
+    return (
+      <>
+        <div className="subpage-header">
+          <button className="back-btn" onClick={() => router.push("/")} aria-label="Go back">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M19 12H5M12 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <h1 className="subpage-title">Active Emergency</h1>
+        </div>
+
+        <div style={{ textAlign: "center", padding: "48px 16px" }}>
+          <div style={{ fontSize: 44, marginBottom: 12 }}>🔍</div>
+          <h2 style={{ fontSize: 18, fontWeight: 800, color: "var(--text-title)", marginBottom: 6 }}>
+            SOS Request Not Found
+          </h2>
+          <p style={{ fontSize: 13, color: "var(--text-secondary)", maxWidth: 300, margin: "0 auto 24px" }}>
+            The requested emergency record was not found in the local mesh buffer or backend registry.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <button className="btn-red-primary" onClick={() => router.push("/status")}>
+              Lookup Another ID
+            </button>
+            <button className="btn-white-outline" onClick={() => router.push("/emergency")}>
+              Submit New SOS
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const isAssigned = sosRecord.status === "assigned";
+  const resourcesDisplay =
+    sosRecord.neededResources && sosRecord.neededResources.length > 0
+      ? sosRecord.neededResources.map((r) => RESOURCE_LABELS[r] || r).join(" + ")
+      : "General Emergency";
+
+  const formattedTime = sosRecord.createdAt
+    ? new Date(sosRecord.createdAt).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })
+    : "Just now";
+
+  const locationCoords =
+    sosRecord.location?.lat != null && sosRecord.location?.lng != null
+      ? `${sosRecord.location.lat.toFixed(4)}° N, ${sosRecord.location.lng.toFixed(4)}° E`
+      : sosRecord.location?.area || "Location Attached";
 
   const timelineSteps = [
-    { label: "SOS Sent", time: "09:42 AM", status: "done" as const },
-    { label: "Received by nearby devices", time: "09:43 AM", status: "done" as const },
-    { label: "Forwarded to command center", time: "09:45 AM", status: "center-node" as const },
-    { label: "Responders on the way", time: "Pending...", status: "pending" as const },
+    { label: "SOS Sent", time: formattedTime, status: "done" as const },
+    { label: "Received by nearby devices", time: "Verified", status: "done" as const },
+    {
+      label: "Forwarded to command center",
+      time: isAssigned ? "Confirmed" : "Active node",
+      status: isAssigned ? ("done" as const) : ("center-node" as const),
+    },
+    {
+      label: isAssigned ? "Responders on the way" : "Awaiting dispatch",
+      time: isAssigned ? "Dispatched" : "Pending...",
+      status: isAssigned ? ("done" as const) : ("pending" as const),
+    },
   ];
 
   return (
@@ -37,11 +219,15 @@ export default function ActiveEmergencyPage() {
           </svg>
         </div>
         <div className="active-status-meta">
-          <div className="active-status-types">Medical + Fire + Food + Shelter</div>
-          <div className="active-status-people">2 people in danger</div>
-          <div className="active-status-id-code">{sosId}</div>
+          <div className="active-status-types">{resourcesDisplay}</div>
+          <div className="active-status-people">
+            {sosRecord.peopleCount ?? 1} {((sosRecord.peopleCount ?? 1) === 1 ? "person" : "people")} in danger
+          </div>
+          <div className="active-status-id-code">{sosRecord.id}</div>
         </div>
-        <span className="high-severity-pill">High</span>
+        <span className={sosRecord.severityLabel === "critical" ? "high-severity-pill" : "high-severity-pill"}>
+          {sosRecord.severityLabel ? sosRecord.severityLabel.toUpperCase() : "HIGH"}
+        </span>
       </div>
 
       {/* ── Live Aerial Satellite Map ── */}
@@ -55,14 +241,14 @@ export default function ActiveEmergencyPage() {
           <div className="radar-ring inner" />
           <div className="aerial-pin">📍</div>
           <div className="map-zoom-controls">
-            <button className="zoom-btn">+</button>
-            <button className="zoom-btn">−</button>
+            <button className="zoom-btn" onClick={() => {}}>+</button>
+            <button className="zoom-btn" onClick={() => {}}>−</button>
           </div>
         </div>
         <div className="coords-bar-card" style={{ border: "none", borderTop: "1px solid var(--border)", borderRadius: 0, marginBottom: 0 }}>
           <div className="coords-bar-left">
             <span className="coords-pin-icon">📍</span>
-            <div className="coords-text-main">27.7089° N, 85.3227° E (± 8 m)</div>
+            <div className="coords-text-main">{locationCoords}</div>
           </div>
         </div>
       </div>

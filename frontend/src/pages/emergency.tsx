@@ -120,23 +120,24 @@ export default function EmergencyPage() {
     shelter_unit: 0,
     medical_team: 0,
   });
-  const [peopleCount, setPeopleCount] = useState(2);
+  const [peopleCount, setPeopleCount] = useState(1);
   const [location, setLocation] = useState<LocationData>({
     method: "gps",
-    lat: 27.7089,
-    lng: 85.3227,
-    accuracy: 8,
-    area: "27.7089° N, 85.3227° E",
+    lat: null,
+    lng: null,
+    accuracy: null,
+    area: "",
   });
-  const [message, setMessage] = useState("People trapped near the old bridge. Need immediate help.");
+  const [message, setMessage] = useState("");
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState("");
+  const [submitError, setSubmitError] = useState("");
   const [sosResult, setSosResult] = useState<SosResult | null>(null);
 
   // Sending step animation state
   const [sendingSteps, setSendingSteps] = useState([
-    { label: "Location attached", sublabel: "27.7089° N, 85.3227° E", status: "pending" as "done" | "active" | "pending" },
-    { label: "Requirements included", sublabel: "Medical + Fire + Food + Shelter", status: "pending" as "done" | "active" | "pending" },
+    { label: "Location attached", sublabel: "GPS / Landmark", status: "pending" as "done" | "active" | "pending" },
+    { label: "Requirements included", sublabel: "Emergency alert", status: "pending" as "done" | "active" | "pending" },
     { label: "Sending to nearby devices", sublabel: "Mesh network (ESP32)", status: "pending" as "done" | "active" | "pending" },
     { label: "Contacting command center", sublabel: "Waiting for confirmation...", status: "pending" as "done" | "active" | "pending" },
   ]);
@@ -157,7 +158,7 @@ export default function EmergencyPage() {
   };
 
   const detectGPS = useCallback(() => {
-    if (!navigator.geolocation) {
+    if (typeof window === "undefined" || !navigator.geolocation) {
       setGpsError("GPS not available on this device");
       return;
     }
@@ -165,22 +166,32 @@ export default function EmergencyPage() {
     setGpsError("");
     navigator.geolocation.getCurrentPosition(
       (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const accuracy = Math.round(pos.coords.accuracy) || 8;
         setLocation({
           method: "gps",
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: Math.round(pos.coords.accuracy) || 8,
-          area: `${pos.coords.latitude.toFixed(4)}° N, ${pos.coords.longitude.toFixed(4)}° E`,
+          lat,
+          lng,
+          accuracy,
+          area: `${lat.toFixed(4)}° N, ${lng.toFixed(4)}° E`,
         });
         setGpsLoading(false);
       },
       (err) => {
-        setGpsError(err.message || "Using cached location");
+        setGpsError(err.message || "Unable to acquire GPS signal. Please enter landmark manually.");
         setGpsLoading(false);
       },
-      { enableHighAccuracy: true, timeout: 6000, maximumAge: 0 }
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
     );
   }, []);
+
+  // Trigger GPS detection when entering Step 2 if GPS method is active and coordinates are empty
+  useEffect(() => {
+    if (step === 2 && location.method === "gps" && location.lat === null && !gpsLoading && !gpsError) {
+      detectGPS();
+    }
+  }, [step, location.method, location.lat, gpsLoading, gpsError, detectGPS]);
 
   const getSelectedResources = () => {
     const selected: string[] = [];
@@ -201,18 +212,39 @@ export default function EmergencyPage() {
   };
 
   const handleSubmitSOS = async () => {
-    setStep(4);
+    setSubmitError("");
+    const derivedArea = location.area.trim() ||
+      (location.lat != null && location.lng != null
+        ? `${location.lat.toFixed(4)}° N, ${location.lng.toFixed(4)}° E`
+        : "Disaster Zone");
+    const derivedMessage = message.trim() ||
+      `Emergency alert: ${getSelectedResources().join(", ") || "Immediate assistance requested"}. People in danger: ${peopleCount}.`;
 
     const payload = {
       location: {
-        area: location.area || "27.7089° N, 85.3227° E",
+        area: derivedArea,
         ...(location.lat != null && { lat: location.lat }),
         ...(location.lng != null && { lng: location.lng }),
       },
-      message: message || "People trapped near the old bridge. Need immediate help.",
+      message: derivedMessage,
       peopleCount,
       neededResources: getNeededResourceTypes(),
     };
+
+    setStep(4);
+
+    const selectedList = getSelectedResources();
+    const locSub = location.lat != null && location.lng != null
+      ? `${location.lat.toFixed(4)}° N, ${location.lng.toFixed(4)}° E`
+      : derivedArea;
+    const reqSub = selectedList.length > 0 ? selectedList.join(", ") : "Emergency alert";
+
+    setSendingSteps([
+      { label: "Location attached", sublabel: locSub, status: "pending" },
+      { label: "Requirements included", sublabel: reqSub, status: "pending" },
+      { label: "Sending to nearby devices", sublabel: "Mesh network (ESP32)", status: "pending" },
+      { label: "Contacting command center", sublabel: "Waiting for confirmation...", status: "pending" },
+    ]);
 
     // Staged animation matching Screen 5
     const animateStep = (index: number, delay: number): Promise<void> =>
@@ -232,27 +264,43 @@ export default function EmergencyPage() {
     await animateStep(1, 600);
     await animateStep(2, 600);
 
-    const generatedId = `#RM-2026-0427-001`;
-
     try {
+      let resultId = "";
+      let resultTime = new Date().toISOString();
+
       if (isOffline) {
-        cacheOfflineRequest(payload);
-        setSosResult({ id: generatedId, createdAt: new Date().toISOString() });
+        resultId = cacheOfflineRequest(payload);
+        setSosResult({ id: resultId, createdAt: resultTime });
       } else {
-        const res = await api.post("/send_sos", payload);
-        const data = res.data?.data;
-        setSosResult({
-          id: data?.id || generatedId,
-          createdAt: data?.createdAt || new Date().toISOString(),
-        });
+        try {
+          const res = await api.post("/send_sos", payload);
+          const data = res.data?.data;
+          resultId = data?.id || cacheOfflineRequest(payload);
+          resultTime = data?.createdAt || new Date().toISOString();
+          setSosResult({ id: resultId, createdAt: resultTime });
+        } catch (err: unknown) {
+          const axiosErr = err as { response?: { status: number; data?: { error?: string; message?: string } } };
+          if (axiosErr?.response && axiosErr.response.status >= 400 && axiosErr.response.status < 500) {
+            setStep(3);
+            setSubmitError(
+              axiosErr.response.data?.error ||
+              axiosErr.response.data?.message ||
+              "Invalid request parameters. Please verify your emergency details."
+            );
+            return;
+          }
+          // Network failure fallback to offline storage
+          resultId = cacheOfflineRequest(payload);
+          setSosResult({ id: resultId, createdAt: resultTime });
+        }
       }
 
       await animateStep(3, 700);
       setSendingSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
       setTimeout(() => setStep(5), 600);
     } catch {
-      cacheOfflineRequest(payload);
-      setSosResult({ id: generatedId, createdAt: new Date().toISOString() });
+      const resultId = cacheOfflineRequest(payload);
+      setSosResult({ id: resultId, createdAt: new Date().toISOString() });
       await animateStep(3, 500);
       setSendingSteps((prev) => prev.map((s) => ({ ...s, status: "done" as const })));
       setTimeout(() => setStep(5), 600);
@@ -263,6 +311,11 @@ export default function EmergencyPage() {
     if (step > 1) setStep(step - 1);
     else router.push("/");
   };
+
+  const hasValidLocation = Boolean(
+    (location.lat != null && location.lng != null) ||
+    (location.area && location.area.trim().length >= 2)
+  );
 
   // ═══════════════════════════════════════════════
   // STEP 1: Emergency Details (Screen 2)
@@ -358,6 +411,7 @@ export default function EmergencyPage() {
           <textarea
             className="form-message-box"
             rows={2}
+            maxLength={1000}
             placeholder="Type your emergency message... e.g. People trapped near the old bridge. Need immediate help."
             value={message}
             onChange={(e) => setMessage(e.target.value)}
@@ -399,6 +453,14 @@ export default function EmergencyPage() {
             }}
             role="button"
             tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setLocation((prev) => ({ ...prev, method: "gps" }));
+                detectGPS();
+              }
+            }}
+            aria-label="Auto-detect location using GPS"
           >
             <div className="loc-option-icon gps">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -420,9 +482,30 @@ export default function EmergencyPage() {
           {/* Option 2: Select on map */}
           <div
             className={`loc-option-card ${location.method === "map" ? "active" : ""}`}
-            onClick={() => setLocation((prev) => ({ ...prev, method: "map" }))}
+            onClick={() => {
+              setLocation((prev) => ({
+                ...prev,
+                method: "map",
+                lat: prev.lat ?? 27.7089,
+                lng: prev.lng ?? 85.3227,
+                area: prev.area || "27.7089° N, 85.3227° E",
+              }));
+            }}
             role="button"
             tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setLocation((prev) => ({
+                  ...prev,
+                  method: "map",
+                  lat: prev.lat ?? 27.7089,
+                  lng: prev.lng ?? 85.3227,
+                  area: prev.area || "27.7089° N, 85.3227° E",
+                }));
+              }
+            }}
+            aria-label="Select location on map"
           >
             <div className="loc-option-icon map">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -439,9 +522,30 @@ export default function EmergencyPage() {
           {/* Option 3: Manual address */}
           <div
             className={`loc-option-card ${location.method === "manual" ? "active" : ""}`}
-            onClick={() => setLocation((prev) => ({ ...prev, method: "manual" }))}
+            onClick={() => {
+              setLocation((prev) => ({
+                ...prev,
+                method: "manual",
+                lat: null,
+                lng: null,
+                accuracy: null,
+              }));
+            }}
             role="button"
             tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setLocation((prev) => ({
+                  ...prev,
+                  method: "manual",
+                  lat: null,
+                  lng: null,
+                  accuracy: null,
+                }));
+              }
+            }}
+            aria-label="Enter address or landmark manually"
           >
             <div className="loc-option-icon manual">
               <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -460,6 +564,9 @@ export default function EmergencyPage() {
         {/* Manual Address Input */}
         {location.method === "manual" && (
           <div style={{ marginBottom: 16 }}>
+            <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--text-title)", marginBottom: 6 }}>
+              Landmark or Area Description
+            </label>
             <input
               type="text"
               placeholder="e.g. Old bridge, Sector 4, Riverside"
@@ -477,6 +584,13 @@ export default function EmergencyPage() {
           </div>
         )}
 
+        {/* GPS Error notice if present */}
+        {gpsError && location.method === "gps" && (
+          <div style={{ fontSize: 12, color: "var(--orange)", marginBottom: 12 }}>
+            ⚠️ {gpsError}
+          </div>
+        )}
+
         {/* Aerial Satellite Map Box */}
         <div className="aerial-map-box">
           <div className="aerial-canvas">
@@ -484,7 +598,7 @@ export default function EmergencyPage() {
             <div className="radar-ring inner" />
             <div className="aerial-pin">📍</div>
             <div className="accuracy-floating-badge">
-              <span>🎯 Accuracy: {location.accuracy || 8} m</span>
+              <span>🎯 Accuracy: {location.accuracy || (location.lat ? 8 : "N/A")} m</span>
             </div>
             <div className="map-zoom-controls">
               <button className="zoom-btn" onClick={() => {}}>+</button>
@@ -499,9 +613,17 @@ export default function EmergencyPage() {
             <span className="coords-pin-icon">📍</span>
             <div>
               <div className="coords-text-main">
-                {location.lat ? `${location.lat.toFixed(4)}° N, ${location.lng?.toFixed(4)}° E` : location.area}
+                {location.lat != null && location.lng != null
+                  ? `${location.lat.toFixed(4)}° N, ${location.lng.toFixed(4)}° E`
+                  : location.area || (gpsLoading ? "Acquiring GPS location..." : "Location not set")}
               </div>
-              <div className="coords-text-sub">(± {location.accuracy || 8} meters)</div>
+              <div className="coords-text-sub">
+                {location.accuracy != null
+                  ? `(± ${location.accuracy} meters)`
+                  : location.area
+                  ? "(Manual landmark)"
+                  : "(Tap Auto-detect or enter landmark)"}
+              </div>
             </div>
           </div>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -509,8 +631,18 @@ export default function EmergencyPage() {
           </svg>
         </div>
 
-        <button className="btn-red-primary" onClick={() => setStep(3)}>
-          Next: Confirm & Send
+        <button
+          className="btn-red-primary"
+          onClick={() => {
+            if (!hasValidLocation) {
+              if (location.method === "gps") detectGPS();
+              return;
+            }
+            setStep(3);
+          }}
+          disabled={location.method === "manual" && !location.area.trim()}
+        >
+          {gpsLoading ? "Detecting GPS..." : "Next: Confirm & Send"}
         </button>
       </>
     );
@@ -521,6 +653,15 @@ export default function EmergencyPage() {
   // ═══════════════════════════════════════════════
   if (step === 3) {
     const selectedResources = getSelectedResources();
+    const emergencyTypeLabel = selectedResources.length > 0
+      ? selectedResources.map((r) => r.split(" (")[0]).join(" + ")
+      : "General Emergency";
+    const requiredResourcesLabel = selectedResources.length > 0
+      ? selectedResources.join(" · ")
+      : "None specified";
+    const locationSummary = location.lat != null && location.lng != null
+      ? `${location.lat.toFixed(4)}° N, ${location.lng.toFixed(4)}° E`
+      : location.area.trim() || "Location not provided";
 
     return (
       <>
@@ -528,6 +669,20 @@ export default function EmergencyPage() {
           <BackButton onClick={handleBack} />
           <h1 className="subpage-title">Confirm & Send</h1>
         </div>
+
+        {submitError && (
+          <div style={{
+            background: "var(--red-soft)",
+            border: "1px solid var(--red-border)",
+            color: "var(--red-bright)",
+            padding: "10px 14px",
+            borderRadius: "10px",
+            fontSize: 13,
+            marginBottom: 16,
+          }}>
+            ⚠️ {submitError}
+          </div>
+        )}
 
         <div className="confirm-hero-box">
           <div className="confirm-siren-circle">
@@ -550,9 +705,7 @@ export default function EmergencyPage() {
             <div className="confirm-icon-box">🛡️</div>
             <div className="confirm-row-body">
               <div className="confirm-row-label">Emergency type</div>
-              <div className="confirm-row-value">
-                {selectedResources.length > 0 ? "Medical + Fire + Food + Shelter" : "General Emergency"}
-              </div>
+              <div className="confirm-row-value">{emergencyTypeLabel}</div>
             </div>
           </div>
 
@@ -570,11 +723,7 @@ export default function EmergencyPage() {
             <div className="confirm-icon-box">🎒</div>
             <div className="confirm-row-body">
               <div className="confirm-row-label">Required resources</div>
-              <div className="confirm-row-value">
-                {selectedResources.length > 0
-                  ? selectedResources.join(" · ")
-                  : "Ambulance (1) · Fire Team (1) · Food & Water (2) · Shelter (3)"}
-              </div>
+              <div className="confirm-row-value">{requiredResourcesLabel}</div>
             </div>
           </div>
 
@@ -584,10 +733,12 @@ export default function EmergencyPage() {
             <div className="confirm-row-body">
               <div className="confirm-row-label">Location</div>
               <div className="confirm-row-value">
-                {location.lat ? `${location.lat.toFixed(4)}° N, ${location.lng?.toFixed(4)}° E` : location.area}
-                <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 500, marginLeft: 4 }}>
-                  (± {location.accuracy || 8} meters)
-                </span>
+                {locationSummary}
+                {location.accuracy != null && (
+                  <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 500, marginLeft: 4 }}>
+                    (± {location.accuracy} meters)
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -607,6 +758,7 @@ export default function EmergencyPage() {
               <textarea
                 className="confirm-message-input"
                 rows={3}
+                maxLength={1000}
                 placeholder="Type your message here... e.g. People trapped near the old bridge. Need immediate help."
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
@@ -710,6 +862,19 @@ export default function EmergencyPage() {
   // STEP 5: Sent! (Screen 6)
   // ═══════════════════════════════════════════════
   if (step === 5 && sosResult) {
+    const formattedDate = sosResult.createdAt
+      ? new Date(sosResult.createdAt).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        }) +
+        " - " +
+        new Date(sosResult.createdAt).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "Just now";
+
     return (
       <>
         <div className="subpage-header">
@@ -739,7 +904,7 @@ export default function EmergencyPage() {
               <span className="sent-row-icon">🕐</span>
               <div>
                 <div className="sent-row-label">Time</div>
-                <div className="sent-row-val">Apr 27, 2026 - 09:42 AM</div>
+                <div className="sent-row-val">{formattedDate}</div>
               </div>
             </div>
 
@@ -749,10 +914,14 @@ export default function EmergencyPage() {
               <div>
                 <div className="sent-row-label">Location</div>
                 <div className="sent-row-val">
-                  27.7089° N, 85.3227° E
-                  <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 500, marginLeft: 4 }}>
-                    (± 8 meters)
-                  </span>
+                  {location.lat != null && location.lng != null
+                    ? `${location.lat.toFixed(4)}° N, ${location.lng.toFixed(4)}° E`
+                    : location.area || "Location Attached"}
+                  {location.accuracy != null && (
+                    <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 500, marginLeft: 4 }}>
+                      (± {location.accuracy} meters)
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

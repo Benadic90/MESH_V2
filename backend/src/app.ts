@@ -4,7 +4,13 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
-import { assignResource, createSosRequest, listRequests, listResources } from "./store";
+import {
+  assignResource,
+  createSosRequest,
+  getRequest,
+  listRequests,
+  listResources,
+} from "./store";
 import { assignResourceSchema, sendSosSchema } from "./validation";
 
 export const app = express();
@@ -28,9 +34,29 @@ app.post("/send_sos", (req: Request, res: Response, next: NextFunction) => {
   } catch (e) { next(e); }
 });
 
-// Return SOS requests, optionally filtered by status.
+
+// Return one SOS by ID, or list SOS requests optionally filtered by status.
 app.get("/get_requests", (req: Request, res: Response) => {
-  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const id = typeof req.query.id === "string" ? req.query.id.trim() : "";
+
+  if (id) {
+    const data = getRequest(id);
+
+    if (!data) {
+      res.status(404).json({
+        success: false,
+        error: "SOS request not found",
+      });
+      return;
+    }
+
+    res.json({ success: true, data });
+    return;
+  }
+
+  const status =
+    typeof req.query.status === "string" ? req.query.status : undefined;
+
   const data = listRequests(status);
   res.json({ success: true, count: data.length, data });
 });

@@ -56,14 +56,13 @@ export default function ActiveEmergencyPage() {
       return;
     }
 
-    // 2. Query backend REST API
-    let isMounted = true;
-    api
-      .get("/get_requests")
-      .then((res) => {
-        if (!isMounted) return;
-        const list: SosRecord[] = res.data?.data || [];
-        const match = list.find((r) => r.id === sosId);
+    // 2. Query the backend for this specific SOS request
+let isMounted = true;
+api
+  .get("/get_requests", { params: { id: sosId } })
+  .then((res) => {
+    if (!isMounted) return;
+    const match: SosRecord | undefined = res.data?.data;
         if (match) {
           setSosRecord(match);
         } else if (sosId === "#RM-2026-0427-001") {

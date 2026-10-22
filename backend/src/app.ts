@@ -4,20 +4,27 @@
 import cors from "cors";
 import express, { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
-import { assignResource, createSosRequest, listRequests, listResources } from "./store";
+import {
+  assignResource,
+  createSosRequest,
+  getRequest,
+  listRequests,
+  listResources,
+} from "./store";
 import { assignResourceSchema, sendSosSchema } from "./validation";
 
 export const app = express();
 
+// Shared middleware parses JSON bodies and permits cross-origin API calls.
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ── Health ──
+// Liveness endpoint for checking that the HTTP service is responding.
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ success: true, message: "Backend healthy", version: "2.0.0" });
 });
 
-// ── SOS ──
+// Validate and store a new SOS, then notify connected Socket.IO clients.
 app.post("/send_sos", (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = sendSosSchema.parse(req.body);
@@ -27,17 +34,40 @@ app.post("/send_sos", (req: Request, res: Response, next: NextFunction) => {
   } catch (e) { next(e); }
 });
 
+
+// Return one SOS by ID, or list SOS requests optionally filtered by status.
 app.get("/get_requests", (req: Request, res: Response) => {
-  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const id = typeof req.query.id === "string" ? req.query.id.trim() : "";
+
+  if (id) {
+    const data = getRequest(id);
+
+    if (!data) {
+      res.status(404).json({
+        success: false,
+        error: "SOS request not found",
+      });
+      return;
+    }
+
+    res.json({ success: true, data });
+    return;
+  }
+
+  const status =
+    typeof req.query.status === "string" ? req.query.status : undefined;
+
   const data = listRequests(status);
   res.json({ success: true, count: data.length, data });
 });
 
+// Return the current resource list, including availability.
 app.get("/resources", (_req: Request, res: Response) => {
   const data = listResources();
   res.json({ success: true, count: data.length, data });
 });
 
+// Assign requested or automatically selected resources to an SOS.
 app.post("/assign_resource", (req: Request, res: Response, next: NextFunction) => {
   try {
     const payload = assignResourceSchema.parse(req.body);
@@ -52,7 +82,7 @@ app.post("/assign_resource", (req: Request, res: Response, next: NextFunction) =
 // POST /sync_lora   -> sync/lora.ts
 // GET  /simulate_lora -> simulation fallback (only when simulation running)
 
-// ── Error handler ──
+// Convert validation and known store errors into client responses; log other errors.
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   if (err instanceof ZodError) {
     res.status(400).json({ success: false, error: "Invalid request payload", details: err.flatten() });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculatePriority, deriveSeverityLabel } from "../src/priority";
 
+// Regression checks for the shared priority rules and severity boundaries.
 describe("priority engine", () => {
   it("collapsed + trapped => critical", () => {
     const s = calculatePriority({ message: "Building collapsed, 5 people trapped inside", peopleCount: 5, location: { area: "A" }, neededResources: ["ambulance"] });

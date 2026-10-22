@@ -53,7 +53,7 @@ export function createSyncLoraRouter(): Router {
     }
   });
 
-  // Simulation: lets tracks 2/3 test mesh without hardware
+  // Return representative packets for UI/testing; this endpoint does not import them.
   r.get("/simulate_lora", (req: Request, res: Response) => {
     const hops = Math.max(0, Math.min(5, Number(req.query.hops ?? 2)));
     const mock = [

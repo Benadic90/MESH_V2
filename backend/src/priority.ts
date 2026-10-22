@@ -5,6 +5,7 @@
 // ─────────────────────────────────────────────
 import { SosRequestInput } from "./types";
 
+// Round a score and keep it within the public 0–100 range.
 export function clampPriority(score: number): number {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
@@ -16,7 +17,7 @@ export interface ScoreBreakdown {
   reasons: string[]; // for dashboard tooltip "Why CRITICAL: ..."
 }
 
-// Weighted dictionary — frozen for nationals (§7)
+// Each matching category contributes its configured weight once per request.
 const WEIGHTS: Array<{ pattern: RegExp; weight: number; reason: string }> = [
   { pattern: /\b(trapped|collapsed|buried|stuck)\b/i, weight: 35, reason: "trapped/collapsed" },
   { pattern: /\b(unconscious|bleeding|critical|not breathing)\b/i, weight: 35, reason: "bleeding/unconscious" },
@@ -26,6 +27,7 @@ const WEIGHTS: Array<{ pattern: RegExp; weight: number; reason: string }> = [
   { pattern: /\b(no food|hungry|water|stranded|thirsty|starving)\b/i, weight: 10, reason: "food/water/stranded" },
 ];
 
+// Produce short keyword-based findings for display with an SOS request.
 export function generateAiSummary(input: SosRequestInput): string {
   const findings: string[] = [];
   if (/\b(trapped|collapsed|buried|stuck)\b/i.test(input.message)) findings.push("Potential entrapment");
@@ -38,6 +40,7 @@ export function generateAiSummary(input: SosRequestInput): string {
   return s || "Standard emergency request.";
 }
 
+// Calculate a priority score, honoring a supplied score before applying rules.
 export function calculatePriority(input: SosRequestInput): number {
   if (input.priorityScore != null) return clampPriority(input.priorityScore);
   let score = 20;
@@ -49,6 +52,7 @@ export function calculatePriority(input: SosRequestInput): number {
   return clampPriority(score);
 }
 
+// Return the calculated score and the reasons contributing to it.
 export function getScoreBreakdown(input: SosRequestInput): ScoreBreakdown {
   const reasons: string[] = [];
   let score = 20;
@@ -62,6 +66,7 @@ export function getScoreBreakdown(input: SosRequestInput): ScoreBreakdown {
   return { score, label, summary: generateAiSummary(input), reasons };
 }
 
+// Map a numeric score to the severity bands used by the API and dashboard.
 export function deriveSeverityLabel(score: number): "low" | "medium" | "high" | "critical" {
   if (score >= 85) return "critical";
   if (score >= 65) return "high";

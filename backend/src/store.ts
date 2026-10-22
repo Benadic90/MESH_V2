@@ -26,9 +26,11 @@ const INITIAL_RESOURCES: Resource[] = BASE_RESOURCES.flatMap((base) =>
   }))
 );
 let resources: Resource[] = cloneResources();
+
+// Make fresh resource objects so reset/restore operations do not reuse mutated records.
 function cloneResources(): Resource[] { return INITIAL_RESOURCES.map((r) => ({ ...r })); }
 
-// ── CRUD ──
+// Create a pending SOS and fill in server-generated identity and priority fields.
 export function createSosRequest(input: SosRequestInput): SosRequest {
   const id = randomUUID();
   const priorityScore = input.priorityScore ?? calculatePriority(input);
@@ -48,6 +50,7 @@ export function createSosRequest(input: SosRequestInput): SosRequest {
   return req;
 }
 
+// Return requests in descending priority order, optionally restricted to one status.
 export function listRequests(status?: string): SosRequest[] {
   const all = Array.from(store.values());
   return all
@@ -55,14 +58,17 @@ export function listRequests(status?: string): SosRequest[] {
     .sort((a, b) => (b.priorityScore || 0) - (a.priorityScore || 0));
 }
 
+// Look up one SOS by its unique ID.
 export function getRequest(id: string): SosRequest | undefined {
   return store.get(id);
 }
 
+// Return a copy of the resource list so callers cannot replace the array.
 export function listResources(): Resource[] {
   return resources.slice();
 }
 
+// Reserve resources and update both their availability and the request status.
 export function assignResource(requestId: string, resourceIds?: string[]): AssignmentResult {
   const req = store.get(requestId);
   if (!req) throw new Error("REQUEST_NOT_FOUND");
@@ -91,11 +97,13 @@ export function assignResource(requestId: string, resourceIds?: string[]): Assig
   return { request: updated, resources: selected };
 }
 
+// Clear requests and restore the initial set of available resources.
 export function resetStore(): void {
   store.clear();
   resources = cloneResources();
 }
 
+// Prefer the first requested resource type; otherwise choose any available resource.
 function findBestResource(req: SosRequest): Resource | undefined {
   const pref = req.neededResources?.[0];
   if (pref) {
@@ -105,7 +113,7 @@ function findBestResource(req: SosRequest): Resource | undefined {
   return resources.find((r) => r.available);
 }
 
-// Snapshot helpers (used by index.ts interval)
+// Convert the in-memory state to/from arrays for index.ts snapshot persistence.
 export function snapshotRequests(): SosRequest[] { return Array.from(store.values()); }
 export function restoreRequests(items: SosRequest[]): void {
   store.clear();

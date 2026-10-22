@@ -19,7 +19,19 @@ dotenv.config();
 const yjsPort = Number(process.env.YJS_PORT ?? 1234);
 const yjsRoom = process.env.YJS_ROOM ?? "rescue-mesh-room";
 const wss = new WebSocketServer({ port: yjsPort });
-wss.on("connection", setupWSConnection);
+
+wss.on("connection", (socket, request) => {
+  const requestUrl = request.url ?? "/";
+  const requestedRoom = requestUrl.slice(1).split("?")[0];
+
+  if (requestedRoom !== yjsRoom) {
+    socket.close(1008, "Room not allowed");
+    return;
+  }
+
+  setupWSConnection(socket, request);
+});
+
 console.log(`[Yjs] WebSocket listening on :${yjsPort}  room="${yjsRoom}"`);
 
 // Restore the in-memory store at boot and persist it periodically and on shutdown.

@@ -178,4 +178,98 @@ npm test	5 passed, 1 failed
 GET /health	Passed
 GET /get_requests	Passed; one assigned test SOS returned
 GET /simulate_lora?hops=3	Passed; two simulated packets returned
-Real LoRa gateway ingestion	Not tested / not verified
+Real LoRa gateway ingestion	Not tested / not verified 
+
+Date: 23 October 2026
+Track: Track 2 — Backend and AI Triage
+Branch: working
+Focus: Addressing CodeRabbit security findings
+
+1. Work Completed
+
+A. ESP32 Synchronization Security
+
+Updated backend/src/sync/esp32.ts.
+
+Changed the gateway destination to use server-side configuration rather than a caller-supplied request value.
+
+Added request timeouts and redirect rejection.
+
+Added response-size limits and JSON response validation.
+
+Added validation and normalization of imported SOS data.
+
+Limited batch imports to 100 items and added duplicate detection within the same batch.
+
+B. LoRa Synchronization Security
+
+Updated backend/src/sync/lora.ts.
+
+Applied similar gateway, timeout, redirect, and response-size protections.
+
+Added validation and normalization of incoming SOS packets.
+
+Limited batch imports and added duplicate detection.
+
+Kept the existing LoRa simulation endpoint for testing.
+
+C. Environment Configuration
+
+Updated the root .env.example file with ADMIN_API_TOKEN and LORA_GATEWAY_IP.
+
+Confirmed that the local .env file is covered by the existing Git ignore rules.
+
+The authentication token has not yet been configured.
+
+D. Yjs WebSocket Room Restriction
+
+Updated backend/src/index.ts to accept connections only for the configured Yjs room.
+
+Connections requesting a different room are rejected.
+
+Kept the change within the backend; no frontend or firmware files were intentionally modified.
+
+2. Verification Performed
+
+Ran npm run build after updating the ESP32 and LoRa synchronization files.
+
+Ran npm run build again after the Yjs room restriction change.
+
+Result: Both builds completed successfully with no TypeScript compilation errors.
+
+Checked the Git working tree and whitespace errors earlier in the session. The intended modified files at that checkpoint were .env.example, backend/src/sync/esp32.ts, and backend/src/sync/lora.ts; backend/src/index.ts was subsequently updated.
+
+3. Security Findings Being Addressed
+
+The work targets CodeRabbit findings concerning:
+
+Unsafe or insufficiently validated synchronization inputs.
+
+Server-side request forgery (SSRF) risks in gateway synchronization.
+
+Duplicate processing and excessive synchronization batches.
+
+Unrestricted Yjs room creation.
+
+4. Pending Work
+
+Test the Yjs room restriction at runtime.
+
+Add and verify authentication and authorization for sensitive HTTP endpoints, especially GET /get_requests and POST /assign_resource.
+
+Review Socket.IO authentication and prevent unauthorized exposure of full SOS records.
+
+Complete gateway IP validation and allowlisting for stronger SSRF protection.
+
+Review remaining CodeRabbit findings and run the backend test suite.
+
+Review the final Git diff and coordinate any required frontend authentication changes with the Track 3 teammate.
+
+5. Current Status
+
+Build status: Passing
+Security review: In progress
+Runtime security tests: Pending
+Team push/merge: Not performed as part of this session
+
+Summary: Implemented initial backend security improvements for ESP32 and LoRa synchronization, added Yjs room-name restriction, and confirmed that the backend compiles successfully. Authorization, runtime testing, and final security verification remain outstanding.

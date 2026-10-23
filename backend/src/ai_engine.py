@@ -6,7 +6,7 @@ import re
 # ─────────────────────────────────────────────
 
 KEYWORD_WEIGHTS = [
-    {"pattern": re.compile(r"\b(trapped|collapsed|buried|stuck)\b", re.IGNORECASE), "weight": 35, "reason": "trapped/collapsed"},
+    {"pattern": re.compile(r"\b(trapped|collapsed|buried|stuck)\b", re.IGNORECASE), "weight": 40, "reason": "trapped/collapsed"},
     {"pattern": re.compile(r"\b(unconscious|bleeding|critical|not breathing)\b", re.IGNORECASE), "weight": 35, "reason": "bleeding/unconscious"},
     {"pattern": re.compile(r"\b(fire|explosion|burning|smoke|burn)\b", re.IGNORECASE), "weight": 30, "reason": "fire/burning"},
     {"pattern": re.compile(r"\b(injured|fracture|pain|medical|hurt|wound)\b", re.IGNORECASE), "weight": 20, "reason": "injury/medical"},

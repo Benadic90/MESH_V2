@@ -1,0 +1,42 @@
+name: Track 2 Backend CI
+
+on:
+  push:
+    branches: [working]
+  pull_request:
+    branches: [working]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: track2-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-checks:
+    name: Backend build and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript build
+        run: npm run build
+
+      - name: Run backend tests
+        run: npm test

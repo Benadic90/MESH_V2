@@ -19,7 +19,7 @@ export interface ScoreBreakdown {
 
 // Each matching category contributes its configured weight once per request.
 const WEIGHTS: Array<{ pattern: RegExp; weight: number; reason: string }> = [
-  { pattern: /\b(trapped|collapsed|buried|stuck)\b/i, weight: 35, reason: "trapped/collapsed" },
+  { pattern: /\b(trapped|collapsed|buried|stuck)\b/i, weight: 40, reason: "trapped/collapsed" },
   { pattern: /\b(unconscious|bleeding|critical|not breathing)\b/i, weight: 35, reason: "bleeding/unconscious" },
   { pattern: /\b(fire|explosion|burning|smoke|burn)\b/i, weight: 30, reason: "fire/burning" },
   { pattern: /\b(injured|fracture|pain|medical|hurt|wound)\b/i, weight: 20, reason: "injury/medical" },

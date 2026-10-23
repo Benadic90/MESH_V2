@@ -40,6 +40,30 @@ export const syncEsp32Schema = z.object({
   ip: z.string().trim().min(7).max(45).default("192.168.4.1"),
 });
 
+const importedLocationSchema = z
+  .object({
+    area: z.string().trim().min(2).max(120),
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+  })
+  .strict();
+
+export const importedSosSchema = z
+  .object({
+    reporterName: z.string().trim().min(2).max(80).optional(),
+    contactNumber: z.string().trim().min(7).max(20).optional(),
+    location: importedLocationSchema,
+    message: z.string().trim().min(5).max(1000),
+    peopleCount: z.number().int().min(1).max(500).optional(),
+    neededResources: z.array(z.enum(resourceTypes)).max(5).optional(),
+    priorityScore: z.number().min(0).max(100).optional(),
+    severityLabel: z.enum(["low", "medium", "high", "critical"]).optional(),
+    hopCount: z.number().int().min(0).max(5).optional(),
+  })
+  .strict();
+
+export const importedSosArraySchema = z.array(importedSosSchema).max(100);
+
 // Optional LoRa gateway settings; the port is available for gateway configuration.
 export const syncLoraSchema = z
   .object({
@@ -50,3 +74,4 @@ export const syncLoraSchema = z
 
 export type SendSosInput = z.infer<typeof sendSosSchema>;
 export type AssignResourceInput = z.infer<typeof assignResourceSchema>;
+export type ImportedSosInput = z.infer<typeof importedSosSchema>;

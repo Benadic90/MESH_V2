@@ -1,76 +1,62 @@
 
-import { Router, Request, Response } from "express";
-import { createSosRequest, listRequests } from "../store";
-
-const MAX_IMPORT_ITEMS = 100;
-const MAX_RESPONSE_BYTES = 1_048_576; // 1 MB
-const ALLOWED_RESOURCE_TYPES = [
-  "ambulance",
-  "medical_team",
-  "fire_team",
-  "shelter_unit",
-  "food_supply",
-] as const;
+import { Request, Response, Router } from "express";
+import { createSosRequest, listRequests, sanitizeSosForSocket } from "../store";
+import { importedSosSchema } from "../validation";
+import { MAX_IMPORT_ITEMS, MAX_RESPONSE_BYTES, buildSafeGatewayUrl } from "./gateway";
 
 export function createSyncEsp32Router(): Router {
   const r = Router();
 
   r.post("/sync_esp32", async (req: Request, res: Response) => {
-    // The destination is controlled by server configuration, never by req.body.
-    const ip = process.env.ESP32_GATEWAY_IP || "192.168.4.1";
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
 
     try {
-      const resp = await fetch(`http://${ip}/get_requests`, {
+      const gatewayUrl = await buildSafeGatewayUrl(
+        process.env.ESP32_GATEWAY_IP,
+        "192.168.4.1",
+        "/get_requests"
+      );
+
+      const response = await fetch(gatewayUrl, {
         signal: controller.signal,
-        redirect: "error",
+        redirect: "manual",
+        headers: { Accept: "application/json" },
       });
 
-      if (!resp.ok) {
-        res.status(502).json({
-          success: false,
-          error: `ESP32 HTTP ${resp.status}`,
-        });
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error("Gateway redirected unexpectedly");
+      }
+
+      if (!response.ok) {
+        res.status(502).json({ success: false, error: `ESP32 HTTP ${response.status}` });
         return;
       }
 
-      const contentLength = Number(resp.headers.get("content-length") || 0);
+      const contentLength = Number(response.headers.get("content-length") || 0);
       if (contentLength > MAX_RESPONSE_BYTES) {
-        res.status(502).json({
-          success: false,
-          error: "ESP32 response is too large",
-        });
+        res.status(502).json({ success: false, error: "ESP32 response is too large" });
         return;
       }
 
-      // Read the response with a strict size limit, even if Content-Length is absent.
-      if (!resp.body) {
-        res.status(502).json({
-          success: false,
-          error: "ESP32 returned an empty response",
-        });
+      if (!response.body) {
+        res.status(502).json({ success: false, error: "ESP32 returned an empty response" });
         return;
       }
 
-      const reader = resp.body.getReader();
+      const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let totalBytes = 0;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         totalBytes += value.byteLength;
         if (totalBytes > MAX_RESPONSE_BYTES) {
           await reader.cancel();
-          res.status(502).json({
-            success: false,
-            error: "ESP32 response is too large",
-          });
+          res.status(502).json({ success: false, error: "ESP32 response is too large" });
           return;
         }
-
         chunks.push(value);
       }
 
@@ -85,22 +71,12 @@ export function createSyncEsp32Router(): Router {
       try {
         body = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
-        res.status(502).json({
-          success: false,
-          error: "ESP32 returned invalid JSON",
-        });
+        res.status(502).json({ success: false, error: "ESP32 returned invalid JSON" });
         return;
       }
 
-      if (
-        !body ||
-        typeof body !== "object" ||
-        !Array.isArray((body as { data?: unknown }).data)
-      ) {
-        res.status(502).json({
-          success: false,
-          error: "ESP32 response has an invalid format",
-        });
+      if (!body || typeof body !== "object" || !Array.isArray((body as { data?: unknown }).data)) {
+        res.status(502).json({ success: false, error: "ESP32 response has an invalid format" });
         return;
       }
 
@@ -113,109 +89,44 @@ export function createSyncEsp32Router(): Router {
         return;
       }
 
-      let imported = 0;
       const existing = listRequests();
-
-      // Update the set as we import, preventing duplicates in this same batch.
-      const known = new Set(
-        existing.map((item) => `${item.location.area}\u0000${item.message}`)
-      );
+      const known = new Set(existing.map((item) => `${item.location.area}\u0000${item.message}`));
+      let imported = 0;
 
       for (const raw of items) {
-        if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          continue;
+        }
 
-        const item = raw as Record<string, unknown>;
-        if (typeof item.message !== "string") continue;
+        const parsed = importedSosSchema.safeParse(raw);
+        if (!parsed.success) {
+          continue;
+        }
 
-        const message = item.message.trim();
-        if (message.length < 5 || message.length > 1000) continue;
-
-        const location =
-          item.location &&
-          typeof item.location === "object" &&
-          !Array.isArray(item.location)
-            ? (item.location as Record<string, unknown>)
-            : {};
-
-        const area =
-          typeof location.area === "string" ? location.area.trim() : "";
-
-        if (area.length < 2 || area.length > 120) continue;
-
-        const signature = `${area}\u0000${message}`;
-        if (known.has(signature)) continue;
-
-        const lat = location.lat;
-        const lng = location.lng;
-
-        const contactNumber =
-          typeof item.contactNumber === "string" &&
-          item.contactNumber.trim().length >= 7 &&
-          item.contactNumber.trim().length <= 20
-            ? item.contactNumber.trim()
-            : undefined;
-
-        const peopleCount =
-          typeof item.peopleCount === "number" &&
-          Number.isInteger(item.peopleCount) &&
-          item.peopleCount >= 1 &&
-          item.peopleCount <= 500
-            ? item.peopleCount
-            : 1;
-
-        const neededResources = Array.isArray(item.neededResources)
-          ? [
-              ...new Set(
-                item.neededResources.filter(
-                  (value): value is (typeof ALLOWED_RESOURCE_TYPES)[number] =>
-                    typeof value === "string" &&
-                    (ALLOWED_RESOURCE_TYPES as readonly string[]).includes(value)
-                )
-              ),
-            ].slice(0, 5)
-          : [];
-
-        const hopCount =
-          typeof item.hopCount === "number" &&
-          Number.isInteger(item.hopCount) &&
-          item.hopCount >= 0 &&
-          item.hopCount <= 5
-            ? item.hopCount
-            : 0;
+        const item = parsed.data;
+        const area = item.location.area.trim();
+        const signature = `${area}\u0000${item.message.trim()}`;
+        if (known.has(signature)) {
+          continue;
+        }
 
         const sos = createSosRequest({
-          reporterName: contactNumber
-            ? `Victim (${contactNumber})`
-            : "ESP32 Offline Victim",
-          contactNumber,
+          reporterName: item.reporterName ?? `Victim (${item.contactNumber ?? "unknown"})`,
+          contactNumber: item.contactNumber,
           location: {
             area,
-            ...(typeof lat === "number" &&
-            Number.isFinite(lat) &&
-            lat >= -90 &&
-            lat <= 90
-              ? { lat }
-              : {}),
-            ...(typeof lng === "number" &&
-            Number.isFinite(lng) &&
-            lng >= -180 &&
-            lng <= 180
-              ? { lng }
-              : {}),
+            ...(typeof item.location.lat === "number" ? { lat: item.location.lat } : {}),
+            ...(typeof item.location.lng === "number" ? { lng: item.location.lng } : {}),
           },
-          message,
-          peopleCount,
-          neededResources,
-          hopCount,
+          message: item.message,
+          peopleCount: item.peopleCount ?? 1,
+          neededResources: item.neededResources ?? [],
+          hopCount: item.hopCount ?? 0,
         });
 
         known.add(signature);
-
-        if (req.app.locals.io) {
-          req.app.locals.io.emit("sos_created", sos);
-        }
-
-        imported++;
+        if (req.app.locals.io) req.app.locals.io.emit("sos_created", sanitizeSosForSocket(sos));
+        imported += 1;
       }
 
       res.json({
@@ -226,8 +137,7 @@ export function createSyncEsp32Router(): Router {
     } catch {
       res.status(502).json({
         success: false,
-        error:
-          "Cannot reach the configured ESP32 gateway. Check the device connection.",
+        error: "Cannot reach the configured ESP32 gateway. Check the device connection.",
       });
     } finally {
       clearTimeout(timeout);

@@ -30,6 +30,30 @@ let resources: Resource[] = cloneResources();
 // Make fresh resource objects so reset/restore operations do not reuse mutated records.
 function cloneResources(): Resource[] { return INITIAL_RESOURCES.map((r) => ({ ...r })); }
 
+export function sanitizeSosForSocket(item: SosRequest) {
+  return {
+    id: item.id,
+    status: item.status,
+    priorityScore: item.priorityScore,
+    severityLabel: item.severityLabel,
+    createdAt: item.createdAt,
+    area: item.location?.area,
+    peopleCount: item.peopleCount,
+    neededResources: item.neededResources ?? [],
+    hopCount: item.hopCount,
+    assignedResourceIds: item.assignedResourceIds ?? [],
+  };
+}
+
+export function sanitizeAssignmentForSocket(result: AssignmentResult) {
+  return {
+    requestId: result.request.id,
+    status: result.request.status,
+    assignedResourceIds: result.resources.map((resource) => resource.id),
+    resourceTypes: result.resources.map((resource) => resource.type),
+  };
+}
+
 // Create a pending SOS and fill in server-generated identity and priority fields.
 export function createSosRequest(input: SosRequestInput): SosRequest {
   const id = randomUUID();

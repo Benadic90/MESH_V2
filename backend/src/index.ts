@@ -3,6 +3,7 @@
 // Ports: Express :4000, Yjs WS :1234 room=rescue-mesh-room
 // ─────────────────────────────────────────────
 import dotenv from "dotenv";
+
 import { createServer } from "node:http";
 import fs from "node:fs";
 import path from "node:path";
@@ -11,9 +12,12 @@ import { WebSocketServer } from "ws";
 // @ts-ignore — y-websocket utils are JS-only
 import { setupWSConnection } from "y-websocket/bin/utils";
 import { app } from "./app";
+import { extractBearerToken, isValidAdminToken } from "./adminAuth";
 import { restoreRequests, restoreResources, snapshotRequests, snapshotResources } from "./store";
 
-dotenv.config();
+dotenv.config({
+  path: path.resolve(__dirname, "../../.env"),
+});
 
 // Start the collaboration WebSocket; port and room can be overridden via environment.
 const yjsPort = Number(process.env.YJS_PORT ?? 1234);
@@ -61,7 +65,44 @@ process.on("SIGTERM", () => { saveSnapshot(); process.exit(0); });
 // Attach Socket.IO to the HTTP server so API handlers can broadcast state changes.
 const port = Number(process.env.PORT ?? 4000);
 const server = createServer(app);
-const io = new Server(server, { cors: { origin: "*", methods: ["GET", "POST"] } });
+const io = new Server(server, {
+  cors: {
+    origin: (origin, callback) => {
+      if (!origin || origin === "http://localhost:3000" || origin === "http://localhost:3001") {
+        callback(null, true);
+        return;
+      }
+      callback(new Error("Origin not allowed"));
+    },
+    methods: ["GET", "POST"],
+    credentials: true,
+  },
+});
+
+io.use((socket, next) => {
+  const token =
+    (typeof socket.handshake.auth?.token === "string" && socket.handshake.auth.token) ||
+    extractBearerToken(
+      typeof socket.handshake.headers.authorization === "string"
+        ? socket.handshake.headers.authorization
+        : Array.isArray(socket.handshake.headers.authorization)
+          ? socket.handshake.headers.authorization[0]
+          : undefined
+    );
+
+  if (!process.env.ADMIN_API_TOKEN || process.env.ADMIN_API_TOKEN.trim().length === 0) {
+    next(new Error("Administrative authentication is not configured"));
+    return;
+  }
+
+  if (!token || !isValidAdminToken(token)) {
+    next(new Error("Invalid authentication token"));
+    return;
+  }
+
+  next();
+});
+
 app.locals.io = io;
 
 // Mount hardware routes after Socket.IO is available to their handlers.

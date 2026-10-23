@@ -1,77 +1,63 @@
 
 import { Router, Request, Response } from "express";
-import { createSosRequest, listRequests } from "../store";
-
-const MAX_IMPORT_ITEMS = 100;
-const MAX_RESPONSE_BYTES = 1_048_576; // 1 MB
-const ALLOWED_RESOURCE_TYPES = [
-  "ambulance",
-  "medical_team",
-  "fire_team",
-  "shelter_unit",
-  "food_supply",
-] as const;
+import { createSosRequest, listRequests, sanitizeSosForSocket } from "../store";
+import { importedSosSchema } from "../validation";
+import { MAX_IMPORT_ITEMS, MAX_RESPONSE_BYTES, buildSafeGatewayUrl } from "./gateway";
 
 export function createSyncLoraRouter(): Router {
   const r = Router();
 
   // Import SOS packets from the server-configured LoRa gateway.
   r.post("/sync_lora", async (req: Request, res: Response) => {
-    // Never let the request body choose the destination host.
-    const ip = process.env.LORA_GATEWAY_IP || "192.168.4.1";
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
 
     try {
-      const resp = await fetch(`http://${ip}/get_requests`, {
+      const gatewayUrl = await buildSafeGatewayUrl(
+        process.env.LORA_GATEWAY_IP,
+        "192.168.4.1",
+        "/get_requests"
+      );
+
+      const response = await fetch(gatewayUrl, {
         signal: controller.signal,
-        redirect: "error",
+        redirect: "manual",
+        headers: { Accept: "application/json" },
       });
 
-      if (!resp.ok) {
-        res.status(502).json({
-          success: false,
-          error: `LoRa gateway HTTP ${resp.status}`,
-        });
+      if (response.status >= 300 && response.status < 400) {
+        throw new Error("Gateway redirected unexpectedly");
+      }
+
+      if (!response.ok) {
+        res.status(502).json({ success: false, error: `LoRa gateway HTTP ${response.status}` });
         return;
       }
 
-      const contentLength = Number(resp.headers.get("content-length") || 0);
+      const contentLength = Number(response.headers.get("content-length") || 0);
       if (contentLength > MAX_RESPONSE_BYTES) {
-        res.status(502).json({
-          success: false,
-          error: "LoRa gateway response is too large",
-        });
+        res.status(502).json({ success: false, error: "LoRa gateway response is too large" });
         return;
       }
 
-      if (!resp.body) {
-        res.status(502).json({
-          success: false,
-          error: "LoRa gateway returned an empty response",
-        });
+      if (!response.body) {
+        res.status(502).json({ success: false, error: "LoRa gateway returned an empty response" });
         return;
       }
 
-      // Enforce the response limit even when Content-Length is missing.
-      const reader = resp.body.getReader();
+      const reader = response.body.getReader();
       const chunks: Uint8Array[] = [];
       let totalBytes = 0;
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-
         totalBytes += value.byteLength;
         if (totalBytes > MAX_RESPONSE_BYTES) {
           await reader.cancel();
-          res.status(502).json({
-            success: false,
-            error: "LoRa gateway response is too large",
-          });
+          res.status(502).json({ success: false, error: "LoRa gateway response is too large" });
           return;
         }
-
         chunks.push(value);
       }
 
@@ -86,22 +72,12 @@ export function createSyncLoraRouter(): Router {
       try {
         body = JSON.parse(new TextDecoder().decode(bytes));
       } catch {
-        res.status(502).json({
-          success: false,
-          error: "LoRa gateway returned invalid JSON",
-        });
+        res.status(502).json({ success: false, error: "LoRa gateway returned invalid JSON" });
         return;
       }
 
-      if (
-        !body ||
-        typeof body !== "object" ||
-        !Array.isArray((body as { data?: unknown }).data)
-      ) {
-        res.status(502).json({
-          success: false,
-          error: "LoRa gateway response has an invalid format",
-        });
+      if (!body || typeof body !== "object" || !Array.isArray((body as { data?: unknown }).data)) {
+        res.status(502).json({ success: false, error: "LoRa gateway response has an invalid format" });
         return;
       }
 
@@ -116,109 +92,47 @@ export function createSyncLoraRouter(): Router {
 
       let imported = 0;
       let totalHops = 0;
-
-      // Deduplicate against existing requests and earlier packets in this batch.
       const existing = listRequests();
-      const known = new Set(
-        existing.map((item) => `${item.location.area}\u0000${item.message}`)
-      );
+      const known = new Set(existing.map((item) => `${item.location.area}\u0000${item.message}`));
 
       for (const raw of items) {
-        if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          continue;
+        }
 
-        const item = raw as Record<string, unknown>;
-        if (typeof item.message !== "string") continue;
+        const parsed = importedSosSchema.safeParse(raw);
+        if (!parsed.success) {
+          continue;
+        }
 
-        const message = item.message.trim();
-        if (message.length < 5 || message.length > 1000) continue;
-
-        const location =
-          item.location &&
-          typeof item.location === "object" &&
-          !Array.isArray(item.location)
-            ? (item.location as Record<string, unknown>)
-            : {};
-
-        const area =
-          typeof location.area === "string" ? location.area.trim() : "";
-
-        if (area.length < 2 || area.length > 120) continue;
-
-        const signature = `${area}\u0000${message}`;
-        if (known.has(signature)) continue;
-
-        const lat = location.lat;
-        const lng = location.lng;
-
-        const contactNumber =
-          typeof item.contactNumber === "string" &&
-          item.contactNumber.trim().length >= 7 &&
-          item.contactNumber.trim().length <= 20
-            ? item.contactNumber.trim()
-            : undefined;
-
-        const peopleCount =
-          typeof item.peopleCount === "number" &&
-          Number.isInteger(item.peopleCount) &&
-          item.peopleCount >= 1 &&
-          item.peopleCount <= 500
-            ? item.peopleCount
-            : 1;
-
-        const neededResources = Array.isArray(item.neededResources)
-          ? [
-              ...new Set(
-                item.neededResources.filter(
-                  (value): value is (typeof ALLOWED_RESOURCE_TYPES)[number] =>
-                    typeof value === "string" &&
-                    (ALLOWED_RESOURCE_TYPES as readonly string[]).includes(value)
-                )
-              ),
-            ].slice(0, 5)
-          : [];
-
-        const hopCount =
-          typeof item.hopCount === "number" &&
-          Number.isInteger(item.hopCount) &&
-          item.hopCount >= 0 &&
-          item.hopCount <= 5
-            ? item.hopCount
-            : 0;
+        const item = parsed.data;
+        const signature = `${item.location.area.trim()}\u0000${item.message.trim()}`;
+        if (known.has(signature)) {
+          continue;
+        }
 
         const sos = createSosRequest({
-          reporterName: contactNumber
-            ? `Victim (${contactNumber})`
-            : "LoRa Victim",
-          contactNumber,
+          reporterName: item.reporterName ?? `Victim (${item.contactNumber ?? "unknown"})`,
+          contactNumber: item.contactNumber,
           location: {
-            area,
-            ...(typeof lat === "number" &&
-            Number.isFinite(lat) &&
-            lat >= -90 &&
-            lat <= 90
-              ? { lat }
-              : {}),
-            ...(typeof lng === "number" &&
-            Number.isFinite(lng) &&
-            lng >= -180 &&
-            lng <= 180
-              ? { lng }
-              : {}),
+            area: item.location.area,
+            ...(typeof item.location.lat === "number" ? { lat: item.location.lat } : {}),
+            ...(typeof item.location.lng === "number" ? { lng: item.location.lng } : {}),
           },
-          message,
-          peopleCount,
-          neededResources,
-          hopCount,
+          message: item.message,
+          peopleCount: item.peopleCount ?? 1,
+          neededResources: item.neededResources ?? [],
+          hopCount: item.hopCount ?? 0,
         });
 
         known.add(signature);
-        totalHops += hopCount;
+        totalHops += sos.hopCount ?? 0;
 
         if (req.app.locals.io) {
-          req.app.locals.io.emit("sos_created", sos);
+          req.app.locals.io.emit("sos_created", sanitizeSosForSocket(sos));
         }
 
-        imported++;
+        imported += 1;
       }
 
       res.json({
@@ -233,8 +147,7 @@ export function createSyncLoraRouter(): Router {
     } catch {
       res.status(502).json({
         success: false,
-        error:
-          "Cannot reach the configured LoRa gateway. Check gateway power and Wi-Fi.",
+        error: "Cannot reach the configured LoRa gateway. Check gateway power and Wi-Fi.",
       });
     } finally {
       clearTimeout(timeout);

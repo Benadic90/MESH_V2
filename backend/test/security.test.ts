@@ -106,6 +106,41 @@ describe("backend security regressions", () => {
     expect(assignmentBody.data.request.id).toBe(createdBody.data.id);
   });
 
+  it("requires admin auth for single-request lookup and returns the matching SOS", async () => {
+    const port = getPort(server);
+    const sos = createSosRequest({
+      reporterName: "Lookup Test Reporter",
+      location: { area: "Lookup Sector" },
+      message: "Need help locating one specific request",
+      peopleCount: 2,
+      neededResources: ["ambulance"],
+    });
+    const requestUrl = `http://127.0.0.1:${port}/get_requests?id=${encodeURIComponent(sos.id)}`;
+
+    const unauthenticated = await fetch(requestUrl);
+    expect(unauthenticated.status).toBe(401);
+    expect(await unauthenticated.json()).toEqual({
+      success: false,
+      error: "Authentication required",
+    });
+
+    const authenticated = await fetch(requestUrl, {
+      headers: { Authorization: `Bearer ${process.env.ADMIN_API_TOKEN}` },
+    });
+    expect(authenticated.status).toBe(200);
+    expect(await authenticated.json()).toEqual({ success: true, data: sos });
+
+    const unknown = await fetch(
+      `http://127.0.0.1:${port}/get_requests?id=${encodeURIComponent("unknown-request-id")}`,
+      { headers: { Authorization: `Bearer ${process.env.ADMIN_API_TOKEN}` } }
+    );
+    expect(unknown.status).toBe(404);
+    expect(await unknown.json()).toEqual({
+      success: false,
+      error: "SOS request not found",
+    });
+  });
+
   it("rejects unauthenticated Socket.IO clients and only emits sanitized events", async () => {
     const port = getPort(server);
 
